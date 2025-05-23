@@ -1,0 +1,19 @@
+{
+    "name": "weatherweb",
+    "version": "1.0.0",
+    "scripts": {
+        "start": "node src/app.js"
+    },
+    "dependencies": {
+        "bcrypt": "^5.0.1",
+        "body-parser": "^1.19.2",
+        "crypto": "^1.0.1",
+        "express": "^4.17.3",
+        "express-session": "^1.17.2",
+        "fs": "^0.0.1-security",
+        "https": "^1.0.0",
+        "jsonwebtoken": "^8.5.1",
+        "path": "^0.12.7",
+        "sqlite3": "^5.0.2"
+    }
+}
