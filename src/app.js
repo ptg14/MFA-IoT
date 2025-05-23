@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
 const session = require('express-session');
@@ -18,7 +19,7 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, '../public')));
 app.use(session({
-    secret: 'your_secret_key',
+    secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: true,
 }));
@@ -33,8 +34,8 @@ database.connect()
 
 // SSL/HTTPS Configuration
 const sslOptions = {
-    key: fs.readFileSync(path.join(__dirname, '../config/ssl/server.key')),
-    cert: fs.readFileSync(path.join(__dirname, '../config/ssl/server.cert')),
+    key: fs.readFileSync(path.join(__dirname, '../ssl/server.key')),
+    cert: fs.readFileSync(path.join(__dirname, '../ssl/server.cert')),
 };
 
 app.use('/api/auth', authRoutes);

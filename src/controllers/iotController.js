@@ -64,6 +64,7 @@ class IoTController {
             }
 
             const storedDevice = deviceData[0];
+            console.log('Login attempt for device:', device);
 
             // Verify device credentials
             if (type !== storedDevice.type ||
@@ -162,6 +163,7 @@ class IoTController {
                 'UPDATE iot SET status = ?, last_auth_time = ? WHERE device = ?',
                 [status, new Date().toISOString(), device]
             );
+            console.log('Challenge verified:', device, status);
 
             res.status(200).json({
                 message: message,

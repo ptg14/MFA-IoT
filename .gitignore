@@ -3,3 +3,4 @@ ssl/
 .vscode/
 database/
 package-lock.json
+.env

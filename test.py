@@ -12,6 +12,7 @@ import argparse
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
+import urllib3
 
 # Configure base logging with minimal formatting
 logging.basicConfig(
@@ -32,14 +33,21 @@ response_logger.setLevel(logging.WARNING)  # Initially disabled (higher than INF
 
 
 class WeatherIoTSimulator:
-    def __init__(self, server_url, device_name=None):
+    def __init__(self, server_url, device_name=None, verify_ssl=True, cert_path=None):
         # Server configuration
         self.server_url = server_url
         notification_logger.info(f"Initializing device with server URL: {server_url}")
 
+        # SSL/TLS configuration
+        self.verify_ssl = verify_ssl
+        self.cert_path = cert_path
+        if not verify_ssl:
+            notification_logger.warning("SSL verification disabled. This is not secure for production!")
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
         # Device identity
         self.device_name = 'weather-device-' + device_name if device_name else f"weather-device-{uuid.uuid4().hex[:8]}"
-        self.device_type = "RaspberryPi"
+        self.device_type = self._generate_device_type()
         self.mac_address = self._generate_mac()
         self.gps_location = self._generate_gps()
 
@@ -59,11 +67,125 @@ class WeatherIoTSimulator:
         self.status = None
 
         notification_logger.info(f"Device initialized: {self.device_name}")
-        notification_logger.info(f"MAC Address: {self.mac_address}")
-        notification_logger.info(f"GPS Location: {self.gps_location}")
+        notification_logger.info(f"Device Type: {self.device_type}")
         notification_logger.info(f"dmidecode Hash: {self.dmidecode_hash}")
         notification_logger.info(f"lscpu Hash: {self.lscpu_hash}")
+        notification_logger.info(f"MAC Address: {self.mac_address}")
+        notification_logger.info(f"GPS Location: {self.gps_location}")
         notification_logger.info('Public key successfully generated')
+
+    @classmethod
+    def load_from_file(cls, filename, server_url=None, verify_ssl=True, cert_path=None):
+        """Create a device by loading saved profile from a file"""
+        notification_logger.info(f"Loading device profile from {filename}")
+        try:
+            with open(filename, 'r') as f:
+                device_data = json.load(f)
+
+            # Create an empty instance
+            device = cls.__new__(cls)
+
+            # Initialize with server settings
+            device.server_url = server_url or device_data.get('server_url')
+            device.verify_ssl = verify_ssl
+            device.cert_path = cert_path
+            if not verify_ssl:
+                notification_logger.warning("SSL verification disabled. This is not secure for production!")
+                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+            # Load device identity
+            device.device_name = device_data.get('device_name')
+            device.device_type = device_data.get('device_type')
+            device.mac_address = device_data.get('mac_address')
+            device.gps_location = device_data.get('gps_location')
+
+            # Load hardware fingerprints
+            device.dmidecode_hash = device_data.get('dmidecode_hash')
+            device.lscpu_hash = device_data.get('lscpu_hash')
+
+            # Load crypto keys
+            device.public_key_pem = device_data.get('public_key_pem')
+
+            # Deserialize the private key
+            private_key_data = device_data.get('private_key')
+            if private_key_data:
+                device.private_key = serialization.load_pem_private_key(
+                    private_key_data.encode('utf-8'),
+                    password=None,
+                    backend=default_backend()
+                )
+                device.public_key = device.private_key.public_key()
+
+            # Session state
+            device.authenticated = False
+            device.status = None
+
+            notification_logger.info(f"Device loaded from profile: {device.device_name}")
+            notification_logger.info(f"Device Type: {device.device_type}")
+            notification_logger.info(f"dmidecode Hash: {device.dmidecode_hash}")
+            notification_logger.info(f"lscpu Hash: {device.lscpu_hash}")
+            notification_logger.info(f"MAC Address: {device.mac_address}")
+            notification_logger.info(f"GPS Location: {device.gps_location}")
+            notification_logger.info('Public key successfully loaded')
+
+            return device
+
+        except Exception as e:
+            notification_logger.error(f"Error loading device profile: {str(e)}")
+            raise
+
+    def save_to_file(self, filename):
+        """Save the device profile to a file for later use"""
+        notification_logger.info(f"Saving device profile to {filename}")
+
+        # Serialize the private key to PEM format
+        private_key_pem = self.private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption()
+        ).decode('utf-8')
+
+        device_data = {
+            'server_url': self.server_url,
+            'device_name': self.device_name,
+            'device_type': self.device_type,
+            'mac_address': self.mac_address,
+            'gps_location': self.gps_location,
+            'dmidecode_hash': self.dmidecode_hash,
+            'lscpu_hash': self.lscpu_hash,
+            'public_key_pem': self.public_key_pem,
+            'private_key': private_key_pem,
+        }
+
+        try:
+            with open(filename, 'w') as f:
+                json.dump(device_data, f, indent=2)
+            notification_logger.info(f"Device profile saved successfully")
+            return True
+        except Exception as e:
+            notification_logger.error(f"Error saving device profile: {str(e)}")
+            return False
+
+    def _generate_device_type(self):
+        """Generate a random IoT device type"""
+        device_types = [
+            "RaspberryPi",
+            "Arduino",
+            "ESP8266",
+            "ESP32",
+            "BeagleBone",
+            "OrangePi",
+            "JetsonNano",
+            "RockPi",
+            "WeatherStation",
+            "SensorHub",
+            "SmartEdge",
+            "IoTGateway",
+            "NodeMCU",
+            "ParticlePhoton",
+            "AdafruitFeather"
+        ]
+        return random.choice(device_types)
 
     def _generate_mac(self):
         """Generate a random MAC address"""
@@ -146,6 +268,28 @@ class WeatherIoTSimulator:
         public_key = private_key.public_key()
         return private_key, public_key
 
+    def _make_https_request(self, method, url, json_data=None):
+        """Make HTTPS request with proper SSL handling"""
+        headers = {"Content-Type": "application/json"}
+        request_args = {
+            "verify": self.cert_path if self.cert_path else self.verify_ssl
+        }
+
+        try:
+            if method.lower() == 'post':
+                return requests.post(url, json=json_data, headers=headers, **request_args)
+            elif method.lower() == 'get':
+                return requests.get(url, headers=headers, **request_args)
+            else:
+                raise ValueError(f"Unsupported HTTP method: {method}")
+        except requests.exceptions.SSLError as e:
+            notification_logger.error(f"SSL Error: {str(e)}")
+            notification_logger.error("If using self-signed certificates, try with --no-verify-ssl option")
+            raise
+        except requests.exceptions.RequestException as e:
+            notification_logger.error(f"Request Error: {str(e)}")
+            raise
+
     def register(self):
         """Register the device with the server"""
         try:
@@ -164,9 +308,7 @@ class WeatherIoTSimulator:
             }
             request_logger.debug(f"Registration payload: {json.dumps(payload, indent=2)}")
 
-            response = requests.post(
-                url, json=payload, headers={"Content-Type": "application/json"}
-            )
+            response = self._make_https_request('post', url, payload)
 
             response_logger.info(f"Registration response status: {response.status_code}")
             response_logger.debug(f"Response headers: {response.headers}")
@@ -202,9 +344,7 @@ class WeatherIoTSimulator:
             }
             request_logger.debug(f"Login payload: {json.dumps(payload, indent=2)}")
 
-            response = requests.post(
-                url, json=payload, headers={"Content-Type": "application/json"}
-            )
+            response = self._make_https_request('post', url, payload)
 
             response_logger.info(f"Login response status: {response.status_code}")
             response_logger.debug(f"Response headers: {response.headers}")
@@ -269,9 +409,7 @@ class WeatherIoTSimulator:
             }
             request_logger.debug(f"Challenge requests payload: {json.dumps(payload, indent=2)}")
 
-            response = requests.post(
-                url, json=payload, headers={"Content-Type": "application/json"}
-            )
+            response = self._make_https_request('post', url, payload)
 
             response_logger.info(f"Challenge response status: {response.status_code}")
             response_logger.debug(f"Response headers: {response.headers}")
@@ -333,14 +471,10 @@ class WeatherIoTSimulator:
 
         weather = random.choice(conditions)
 
-        # Add air quality information (common concern in Vietnamese cities)
-        # air_quality = random.choice(["Good", "Moderate", "Poor", "Unhealthy"])
-
         data = {
             "temperature": temperature,
             "humidity": humidity,
             "weather": weather,
-            # "air_quality": air_quality
         }
         request_logger.debug(f"Generated Vietnam-like weather data: {data}")
         return data
@@ -360,9 +494,7 @@ class WeatherIoTSimulator:
             request_logger.info(f"Weather data URL: {url}")
             request_logger.debug(f"Weather data payload: {json.dumps(payload, indent=2)}")
 
-            response = requests.post(
-                url, json=payload, headers={"Content-Type": "application/json"}
-            )
+            response = self._make_https_request('post', url, payload)
 
             response_logger.info(f"Weather data response status: {response.status_code}")
             response_logger.debug(f"Response headers: {response.headers}")
@@ -426,31 +558,71 @@ class WeatherIoTSimulator:
 if __name__ == "__main__":
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="IoT Weather Simulator")
-    parser.add_argument("-l", "--log-level", type=int, choices=[0, 1, 2], default=0,
+    parser.add_argument("-l", "--log-level", type=int, choices=[0, 1, 2], default=1,
                         help="Logging level: 0=None, 1=notifications only, 2=notifications+requests+responses")
     parser.add_argument("-d", "--device", help="Set a custom device ID")
-    parser.add_argument("-s", "--server",
-                        help="Server URL")
+    parser.add_argument("-s", "--server", help="Server URL (include https:// for secure connections)")
+    parser.add_argument("--no-verify-ssl", action="store_true",
+                        help="Disable SSL certificate verification (not recommended for production)")
+    parser.add_argument("--cert",
+                        help="Path to custom certificate or CA bundle for SSL verification")
+
+    # Add profile management arguments
+    parser.add_argument("-o", "--save-profile", metavar="FILENAME",
+                        help="Save device profile to file after initialization")
+    parser.add_argument("-f", "--load-profile", metavar="FILENAME",
+                        help="Load device profile from file instead of creating a new device")
     parser.add_argument("-i", "--interval", type=int, default=30,
                         help="Data transmission interval in seconds (default: 30)")
+    parser.add_argument("--duration", type=int,
+                        help="Run for specified duration in seconds then exit")
+
     args = parser.parse_args()
 
     # Configure logging based on level
     if args.log_level == 1:
         # Level 1: Show notifications only (default)
         notification_logger.setLevel(logging.INFO)
-        request_logger.setLevel(logging.WARNING)  # Higher than INFO, so these won't show
-        response_logger.setLevel(logging.WARNING)  # Higher than INFO, so these won't show
+        request_logger.setLevel(logging.WARNING)
+        response_logger.setLevel(logging.WARNING)
         print("Log level 1: Showing notifications only")
     elif args.log_level == 2:
         # Level 2: Show notifications + requests + responses
         notification_logger.setLevel(logging.INFO)
-        request_logger.setLevel(logging.INFO)  # Now these will show
-        response_logger.setLevel(logging.INFO)  # Now these will show
+        request_logger.setLevel(logging.DEBUG)
+        response_logger.setLevel(logging.DEBUG)
         print("Log level 2: Showing notifications, requests, and responses")
+    else:
+        # Level 0: Show nothing
+        notification_logger.setLevel(logging.WARNING)
+        request_logger.setLevel(logging.WARNING)
+        response_logger.setLevel(logging.WARNING)
 
-    # Create a device simulator with custom device name if provided
-    device = WeatherIoTSimulator(args.server, device_name=args.device)
+    # Check if server URL is using HTTPS
+    if args.server and not args.server.startswith(('http://', 'https://')):
+        args.server = f"https://{args.server}"
+        notification_logger.info(f"No protocol specified, using HTTPS: {args.server}")
+
+    # Create a device simulator - either from file or as new device
+    if args.load_profile:
+        device = WeatherIoTSimulator.load_from_file(
+            args.load_profile,
+            server_url=args.server,  # Override server URL if provided
+            verify_ssl=not args.no_verify_ssl,
+            cert_path=args.cert
+        )
+    else:
+        # Create a device simulator with custom device name if provided
+        device = WeatherIoTSimulator(
+            args.server,
+            device_name=args.device,
+            verify_ssl=not args.no_verify_ssl,
+            cert_path=args.cert
+        )
+
+    # Save profile if requested
+    if args.save_profile:
+        device.save_to_file(args.save_profile)
 
     # Run the simulation with specified interval
-    device.run(interval=args.interval)
+    device.run(interval=args.interval, duration=args.duration)
