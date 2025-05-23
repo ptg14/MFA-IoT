@@ -1,6 +1,4 @@
-ptg14: update readme
-
-GitHub Copilot: # WeatherWeb
+# WeatherWeb
 
 A secure web application for managing and displaying weather data from IoT devices.
 

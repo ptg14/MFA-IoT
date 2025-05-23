@@ -12,7 +12,7 @@ const database = require('./utils/database');
 const { isAuthenticated } = require('./middleware/authMiddleware');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+// const PORT = process.env.PORT || 3000;
 const HTTPS_PORT = process.env.HTTPS_PORT || 3443;
 
 app.use(bodyParser.json());
@@ -65,6 +65,6 @@ httpsServer.listen(HTTPS_PORT, () => {
 });
 
 // Optional: Also start HTTP server (for redirection or development)
-app.listen(PORT, () => {
-    console.log(`HTTP Server is running on http://0.0.0.0:${PORT}`);
-});
+// app.listen(PORT, () => {
+//     console.log(`HTTP Server is running on http://0.0.0.0:${PORT}`);
+// });
