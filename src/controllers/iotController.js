@@ -1,4 +1,6 @@
+const { match } = require('assert');
 const crypto = require('crypto');
+const { register } = require('module');
 
 class IoTController {
     constructor(database) {
@@ -59,6 +61,7 @@ class IoTController {
                 console.log('Device not registered:', device);
                 return res.status(401).json({
                     message: 'Device not registered',
+                    registered: false,
                     success: false
                 });
             }
@@ -78,6 +81,8 @@ class IoTController {
                 console.log('Device details do not match:', device);
                 return res.status(401).json({
                     message: 'Authentication failed: device details do not match',
+                    registered: true,
+                    match: false,
                     success: false
                 });
             }
@@ -133,6 +138,7 @@ class IoTController {
                 console.log('Device not registered:', device);
                 return res.status(401).json({
                     message: 'Device not registered',
+                    registered: false,
                     success: false
                 });
             }
@@ -147,6 +153,7 @@ class IoTController {
                 console.log('Failed challenge verification:', device);
                 return res.status(401).json({
                     message: 'Invalid challenge',
+                    registered: true,
                     success: false
                 });
             }

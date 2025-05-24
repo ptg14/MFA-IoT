@@ -352,13 +352,22 @@ class WeatherIoTSimulator:
 
             # If device is not registered (401), try registering it first
             if response.status_code == 401:
-                notification_logger.warning("Device not registered. Attempting registration first.")
-                if self.register():
-                    notification_logger.info("Registration successful. Retrying login...")
-                    # Try logging in again after successful registration
-                    return self.login()  # Recursive call to try login again
-                else:
-                    notification_logger.error("Registration failed. Cannot proceed with login.")
+                try:
+                    response_data = response.json()
+                    if response_data.get('registered') is False:
+                        notification_logger.warning("Device not registered. Attempting registration first.")
+                        if self.register():
+                            notification_logger.info("Registration successful. Retrying login...")
+                            # Try logging in again after successful registration
+                            return self.login()  # Recursive call to try login again
+                        else:
+                            notification_logger.error("Registration failed. Cannot proceed with login.")
+                            return False
+                    else:
+                        notification_logger.error("Device not matched. Cannot login.")
+                        return False
+                except (json.JSONDecodeError, KeyError):
+                    notification_logger.error("Invalid JSON response or missing 'registered' field")
                     return False
 
             # Login response should have a 202 status code with a challenge
